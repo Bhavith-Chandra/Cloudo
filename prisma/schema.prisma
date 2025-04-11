@@ -1,0 +1,598 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          String    @default("viewer") // admin, viewer, editor
+  accounts      Account[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  costData      CostData[]
+  cloudAccounts CloudAccount[]
+  alertSettings AlertSettings?
+  anomalies     Anomaly[]
+  notifications Notification[]
+  taggingPolicies TaggingPolicy[]
+  complianceReports ComplianceReport[]
+  commitments   Commitment[]
+  spotInstances SpotInstance[]
+  serverlessFunctions ServerlessFunction[]
+  migrations    MigrationPlan[]
+  workflows     Workflow[]
+  apiKeys       ApiKey[]
+  webhooks      Webhook[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CloudAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  provider    String   // AWS, Azure, GCP
+  accountId   String
+  credentials String   // Encrypted credentials
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+  costData    CostData[]
+}
+
+model CostData {
+  id            String       @id @default(cuid())
+  userId        String
+  cloudAccountId String
+  timestamp     DateTime
+  provider      String      // AWS, Azure, GCP
+  service       String      // EC2, S3, etc.
+  resourceId    String
+  cost          Float
+  utilization   Float?      // CPU, memory, or storage utilization
+  region        String
+  tags          Json?       // Additional metadata
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  user          User        @relation(fields: [userId], references: [id])
+  cloudAccount  CloudAccount @relation(fields: [cloudAccountId], references: [id])
+
+  @@index([userId, timestamp])
+  @@index([cloudAccountId, timestamp])
+  @@index([provider, service, region])
+}
+
+model ResourceUtilization {
+  id                String   @id @default(cuid())
+  userId            String
+  resourceId        String
+  provider          String
+  resourceType      String
+  cpuUtilization    Float
+  memoryUtilization Float
+  storageUtilization Float
+  networkUtilization Float
+  cost              Float
+  timestamp         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, timestamp])
+  @@index([resourceId, timestamp])
+  @@index([provider, resourceType])
+}
+
+model ResourceRecommendation {
+  id                    String   @id @default(cuid())
+  userId                String
+  type                  String
+  title                 String
+  description           String
+  resourceId            String
+  provider              String
+  service               String
+  currentCost           Float
+  estimatedSavings      Float
+  confidenceScore       Int
+  impact                String
+  implementationComplexity String
+  explanation           String
+  metrics               Json
+  status                String   @default("pending")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([resourceId])
+  @@index([provider, service])
+}
+
+model AlertSettings {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  channels  Json
+  thresholds Json
+  preferences Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Anomaly {
+  id            String   @id @default(cuid())
+  userId        String
+  timestamp     DateTime
+  provider      String
+  service       String
+  project       String?
+  cost          Float
+  expectedCost  Float
+  deviation     Float
+  severity      String
+  rootCause     String?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, timestamp])
+  @@index([provider, service])
+  @@index([severity, status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String
+  severity  String
+  metadata  Json
+  status    String   @default("unread")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([type, severity])
+}
+
+model TaggingPolicy {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  rules       Json     // Array of tagging rules
+  provider    String   // AWS, Azure, GCP
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String
+  user        User     @relation(fields: [createdBy], references: [id])
+  audits      TaggingAudit[]
+
+  @@index([userId])
+  @@index([provider, isActive])
+}
+
+model TaggingRule {
+  id          String   @id @default(cuid())
+  policyId    String
+  field       String   // Resource field to match
+  operator    String   // equals, contains, regex, etc.
+  value       String   // Value to match
+  tags        Json     // Tags to apply
+  priority    Int      // Rule priority
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  policy      TaggingPolicy @relation(fields: [policyId], references: [id])
+}
+
+model TaggingAudit {
+  id          String   @id @default(cuid())
+  policyId    String
+  resourceId  String
+  provider    String
+  action      String   // create, update, delete
+  oldTags     Json?
+  newTags     Json?
+  status      String   // success, failed
+  error       String?
+  createdAt   DateTime @default(now())
+  policy      TaggingPolicy @relation(fields: [policyId], references: [id])
+}
+
+model ComplianceReport {
+  id          String   @id @default(cuid())
+  userId      String
+  provider    String
+  startDate   DateTime
+  endDate     DateTime
+  status      String   // pending, completed, failed
+  results     Json     // Compliance results
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Commitment {
+  id              String   @id @default(cuid())
+  userId          String
+  provider        String   // AWS, Azure, GCP
+  type            String   // reserved, savings_plan
+  term            Int      // months
+  paymentOption   String   // all_upfront, partial_upfront, no_upfront
+  resourceType    String
+  quantity        Int
+  estimatedSavings Float
+  confidenceScore Float
+  status          String   // pending_approval, approved, rejected
+  approvedAt      DateTime?
+  approvedBy      String?
+  rejectedAt      DateTime?
+  rejectedBy      String?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([provider, type])
+  @@index([resourceType, term])
+}
+
+model SpotInstance {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  instanceType String
+  region    String
+  startTime DateTime
+  endTime   DateTime?
+  status    String
+  savings   Float
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([provider, instanceType, region])
+  @@index([startTime, endTime])
+}
+
+model SpotPrice {
+  id          String   @id @default(cuid())
+  provider    String
+  instanceType String
+  region      String
+  price       Float
+  timestamp   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([provider, instanceType, region, timestamp])
+}
+
+model SpotInterruption {
+  id          String   @id @default(cuid())
+  provider    String
+  instanceType String
+  region      String
+  timestamp   DateTime
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  @@index([provider, instanceType, region, timestamp])
+}
+
+model OnDemandPrice {
+  id          String   @id @default(cuid())
+  provider    String
+  instanceType String
+  region      String
+  price       Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([provider, instanceType, region])
+}
+
+model SpotSettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  autoApproval          Boolean  @default(false)
+  maxRiskTolerance      Int      @default(50)
+  minSavingsThreshold   Int      @default(20)
+  fallbackStrategy      String   @default("on-demand")
+  notificationPreferences Json
+  excludedInstanceTypes String[]
+  excludedRegions      String[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model SpotRecommendation {
+  id          String   @id @default(cuid())
+  userId      String
+  provider    String
+  instanceType String
+  region      String
+  savings     Float
+  riskLevel   String
+  confidence  Int
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ServerlessFunction {
+  id              String   @id @default(cuid())
+  userId          String
+  provider        String   // AWS, Azure, GCP
+  functionName    String
+  region          String
+  runtime         String
+  memorySize      Int      // MB
+  timeout         Int      // seconds
+  currentCost     Float
+  estimatedCost   Float
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  metrics         ServerlessMetric[]
+  recommendations ServerlessRecommendation[]
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([provider, functionName, region])
+}
+
+model ServerlessMetric {
+  id                String   @id @default(cuid())
+  functionId        String
+  timestamp         DateTime
+  duration          Float    // ms
+  memoryUsed        Float    // MB
+  invocations       Int
+  errors           Int
+  coldStarts       Int
+  cost             Float
+  function         ServerlessFunction @relation(fields: [functionId], references: [id])
+
+  @@index([functionId, timestamp])
+}
+
+model ServerlessRecommendation {
+  id              String   @id @default(cuid())
+  functionId      String
+  type            String   // memory, timeout, concurrency
+  currentValue    Float
+  recommendedValue Float
+  estimatedSavings Float
+  confidence      Int
+  status          String   @default("pending")
+  appliedAt       DateTime?
+  function        ServerlessFunction @relation(fields: [functionId], references: [id])
+
+  @@index([functionId])
+  @@index([status])
+}
+
+model ServerlessAudit {
+  id              String   @id @default(cuid())
+  functionId      String
+  action          String   // create, update, delete
+  field           String
+  oldValue        String?
+  newValue        String?
+  performedBy     String
+  timestamp       DateTime @default(now())
+  function        ServerlessFunction @relation(fields: [functionId], references: [id])
+
+  @@index([functionId])
+  @@index([timestamp])
+}
+
+model MigrationPlan {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  source        Json
+  target        Json
+  status        String
+  costEstimate  Json
+  timeline      Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([source, target])
+}
+
+model MigrationMetrics {
+  id                String   @id @default(cuid())
+  userId            String
+  totalPlans        Int
+  activeMigrations  Int
+  completedMigrations Int
+  costSavings       Float
+  timeline          Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Webhook {
+  id            String   @id @default(cuid())
+  name          String
+  url           String
+  events        String[]
+  status        String   @default("active")
+  secret        String   @unique
+  lastTriggered DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([status])
+  @@index([events])
+}
+
+model Metric {
+  id        String   @id @default(cuid())
+  provider  String
+  metric    String
+  value     Float
+  timestamp DateTime @default(now())
+  @@index([provider, metric, timestamp])
+}
+
+model MetricThreshold {
+  id        String   @id @default(cuid())
+  metric    String
+  threshold Float
+  operator  String
+  severity  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Alert {
+  id         String   @id @default(cuid())
+  provider   String
+  metric     String
+  value      Float
+  threshold  Float
+  operator   String
+  severity   String
+  timestamp  DateTime @default(now())
+  resolvedAt DateTime?
+  @@index([provider, metric, timestamp])
+  @@index([severity, status])
+}
+
+model Workflow {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  type          String   // optimization, security, compliance
+  status        String   @default("draft")
+  schedule      String?  // cron expression
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  actions       WorkflowAction[]
+  logs          WorkflowLog[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model WorkflowAction {
+  id            String   @id @default(cuid())
+  workflowId    String
+  workflow      Workflow @relation(fields: [workflowId], references: [id])
+  type          String
+  provider      String
+  resourceId    String
+  parameters    Json
+  status        String   @default("pending")
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ApiKey {
+  id            String   @id @default(cuid())
+  name          String
+  key           String   @unique
+  permissions   String[]
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  lastUsed      DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model CarbonFootprint {
+  id            String   @id @default(cuid())
+  userId        String
+  provider      String
+  service       String
+  region        String
+  emissions     Float    // kgCO2e
+  energySource  String?
+  timestamp     DateTime
+  user          User     @relation(fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, timestamp])
+  @@index([provider, service, region])
+}
+
+model FinOpsReport {
+  id            String   @id @default(cuid())
+  userId        String
+  period        String   // monthly, quarterly, yearly
+  startDate     DateTime
+  endDate       DateTime
+  totalCost     Float
+  savings       Float
+  recommendations Json
+  status        String   @default("draft")
+  user          User     @relation(fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, startDate, endDate])
+}
+
+model WorkflowLog {
+  id        String   @id @default(cuid())
+  actionId  String
+  status    String
+  error     String?
+  details   String
+  timestamp DateTime @default(now())
+  @@index([actionId, timestamp])
+  @@index([status])
+} 
