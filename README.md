@@ -23,7 +23,7 @@ A comprehensive cloud cost management and optimization platform that supports AW
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/cloudo.git
+   git clone https://github.com/Bhavith-Chandra/cloudo.git
    cd cloudo
    ```
 
