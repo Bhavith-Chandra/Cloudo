@@ -173,62 +173,19 @@ export async function GET(request: Request) {
       });
       y -= lineHeight;
 
+      let currentPage = page;
       costs.forEach(cost => {
         if (y < 50) {
-          page = pdfDoc.addPage();
+          currentPage = pdfDoc.addPage();
           y = height - 50;
         }
-
-        const util = utilization.find(u => u.date.getTime() === cost.date.getTime());
-        const charge = chargeback.find(c => c.date.getTime() === cost.date.getTime());
-
-        page.drawText(`${format(cost.date, 'MMM d, yyyy')}:`, {
+        currentPage.drawText(`${cost.service}: $${cost.amount.toFixed(2)}`, {
           x: 50,
           y,
           size: fontSize,
           font,
         });
         y -= lineHeight;
-
-        page.drawText(`  Cost: $${cost.amount.toFixed(2)}`, {
-          x: 50,
-          y,
-          size: fontSize,
-          font,
-        });
-        y -= lineHeight;
-
-        page.drawText(`  Optimized Cost: $${(cost.optimizedAmount || 0).toFixed(2)}`, {
-          x: 50,
-          y,
-          size: fontSize,
-          font,
-        });
-        y -= lineHeight;
-
-        page.drawText(`  Utilization: ${(util?.percentage || 0).toFixed(2)}%`, {
-          x: 50,
-          y,
-          size: fontSize,
-          font,
-        });
-        y -= lineHeight;
-
-        page.drawText(`  Department: ${charge?.department.name || 'N/A'}`, {
-          x: 50,
-          y,
-          size: fontSize,
-          font,
-        });
-        y -= lineHeight;
-
-        page.drawText(`  Chargeback: $${(charge?.amount || 0).toFixed(2)}`, {
-          x: 50,
-          y,
-          size: fontSize,
-          font,
-        });
-        y -= lineHeight * 2;
       });
 
       const pdfBytes = await pdfDoc.save();

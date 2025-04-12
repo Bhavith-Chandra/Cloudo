@@ -595,4 +595,215 @@ model WorkflowLog {
   timestamp DateTime @default(now())
   @@index([actionId, timestamp])
   @@index([status])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String   // 'user' or 'assistant'
+  content   String
+  timestamp DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActionLog {
+  id         String   @id @default(cuid())
+  userId     String
+  provider   String   // 'AWS', 'Azure', 'GCP'
+  resourceId String
+  action     String   // 'stop', 'resize', 'delete', 'schedule'
+  parameters Json?
+  result     Json?
+  timestamp  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AIPrediction {
+  id              String   @id @default(cuid())
+  timestamp       DateTime @default(now())
+  predictedValue  Float
+  actualValue     Float
+  accuracy        Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OptimizationRecommendation {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  impact      Json
+  confidence  Float
+  status      String   @default("pending")
+  appliedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  provider    CloudProvider @relation(fields: [providerId], references: [id])
+  providerId  String
+}
+
+model PredictiveMaintenance {
+  id                String   @id @default(cuid())
+  userId            String
+  resourceId        String
+  provider          String
+  resourceType      String
+  prediction        Json     // Prediction details including risk score, estimated failure time
+  status            String   @default("active") // active, resolved, false_positive
+  severity          String   // critical, warning, info
+  confidence        Float
+  estimatedImpact   Json     // Cost and downtime impact
+  preventiveActions Json     // Recommended actions
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, status])
+  @@index([resourceId])
+  @@index([provider, resourceType])
+}
+
+model MaintenanceAction {
+  id                String   @id @default(cuid())
+  userId            String
+  maintenanceId     String
+  actionType        String
+  status            String   @default("pending") // pending, in_progress, completed, failed
+  executedAt        DateTime?
+  rollbackAt        DateTime?
+  cost              Float
+  savings           Float
+  logs              Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
+  maintenance       PredictiveMaintenance @relation(fields: [maintenanceId], references: [id])
+
+  @@index([userId, status])
+  @@index([maintenanceId])
+}
+
+model HealthMetric {
+  id                String   @id @default(cuid())
+  userId            String
+  resourceId        String
+  provider          String
+  metricType        String
+  value             Float
+  threshold         Float
+  status            String   // healthy, warning, critical
+  timestamp         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, timestamp])
+  @@index([resourceId, metricType])
+}
+
+model MaintenanceReport {
+  id                String   @id @default(cuid())
+  userId            String
+  startDate         DateTime
+  endDate           DateTime
+  totalPredictions  Int
+  truePositives     Int
+  falsePositives    Int
+  preventedOutages  Int
+  costSavings       Float
+  downtimeReduction Float
+  accuracy          Float
+  report            Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, startDate, endDate])
+}
+
+model DisasterRecoveryPlan {
+  id                String   @id @default(cuid())
+  userId            String
+  name              String
+  description       String?
+  status            String   @default("draft") // draft, active, testing, failed
+  rto               Int      // Recovery Time Objective in minutes
+  rpo               Int      // Recovery Point Objective in minutes
+  cost              Float
+  confidence        Float
+  lastTested        DateTime?
+  nextTest          DateTime?
+  sourceProvider    String   // AWS, Azure, GCP
+  targetProvider    String   // AWS, Azure, GCP
+  sourceRegion      String
+  targetRegion      String
+  resources         Json     // List of resources to protect
+  failoverSteps     Json     // Step-by-step failover instructions
+  rollbackSteps     Json     // Step-by-step rollback instructions
+  compliance        Json     // Compliance requirements
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
+  tests             DisasterRecoveryTest[]
+  risks             DisasterRecoveryRisk[]
+  actions           DisasterRecoveryAction[]
+
+  @@index([userId, status])
+  @@index([sourceProvider, targetProvider])
+}
+
+model DisasterRecoveryTest {
+  id                String   @id @default(cuid())
+  planId            String
+  status            String   // pending, in-progress, completed, failed
+  startTime         DateTime
+  endTime           DateTime?
+  duration          Int?     // in minutes
+  successRate       Float?
+  dataRecovery      Float?   // percentage of data recovered
+  rtoAchieved       Int?     // actual RTO achieved
+  rpoAchieved       Int?     // actual RPO achieved
+  cost              Float?
+  logs              Json     // Detailed test logs
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  plan              DisasterRecoveryPlan @relation(fields: [planId], references: [id])
+
+  @@index([planId, status])
+}
+
+model DisasterRecoveryRisk {
+  id                String   @id @default(cuid())
+  planId            String
+  resourceId        String
+  provider          String
+  riskType          String   // outage, data-loss, performance
+  riskScore         Float    // 0-100
+  probability       Float    // 0-1
+  impact            String   // low, medium, high, critical
+  timeframe         String   // immediate, 24h, 72h, 7d
+  factors           Json     // List of risk factors
+  mitigation        Json     // Mitigation recommendations
+  status            String   @default("active") // active, mitigated, false-positive
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  plan              DisasterRecoveryPlan @relation(fields: [planId], references: [id])
+
+  @@index([planId, status])
+  @@index([resourceId, provider])
+}
+
+model DisasterRecoveryAction {
+  id                String   @id @default(cuid())
+  planId            String
+  type              String   // failover, failback, test
+  status            String   // pending, in-progress, completed, failed
+  startTime         DateTime
+  endTime           DateTime?
+  duration          Int?     // in minutes
+  cost              Float?
+  logs              Json     // Action logs
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  plan              DisasterRecoveryPlan @relation(fields: [planId], references: [id])
+
+  @@index([planId, status])
 } 
